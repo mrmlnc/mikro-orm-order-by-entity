@@ -1,22 +1,18 @@
-import { Entity, MikroORM, PrimaryKey, Property } from '@mikro-orm/sqlite';
+import { Entity, ManyToOne, MikroORM, PrimaryKey, PrimaryKeyProp, Property } from '@mikro-orm/sqlite';
 
 @Entity()
-class User {
-
+class Workspace {
   @PrimaryKey()
-  id!: number;
+  sid!: number;
+}
 
-  @Property()
-  name: string;
+@Entity()
+class Project {
+  @PrimaryKey()
+  sid!: number;
 
-  @Property({ unique: true })
-  email: string;
-
-  constructor(name: string, email: string) {
-    this.name = name;
-    this.email = email;
-  }
-
+  @ManyToOne(() => Workspace)
+  workspace!: Workspace;
 }
 
 let orm: MikroORM;
@@ -24,7 +20,7 @@ let orm: MikroORM;
 beforeAll(async () => {
   orm = await MikroORM.init({
     dbName: ':memory:',
-    entities: [User],
+    entities: [Project, Workspace],
     debug: ['query', 'query-params'],
     allowGlobalContext: true, // only for testing
   });
@@ -36,16 +32,21 @@ afterAll(async () => {
 });
 
 test('basic CRUD example', async () => {
-  orm.em.create(User, { name: 'Foo', email: 'foo' });
+  orm.em.create(Workspace, { sid: 1 });
   await orm.em.flush();
   orm.em.clear();
 
-  const user = await orm.em.findOneOrFail(User, { email: 'foo' });
-  expect(user.name).toBe('Foo');
-  user.name = 'Bar';
-  orm.em.remove(user);
-  await orm.em.flush();
+  const workspace = orm.em.getReference(Workspace, { sid: 1 });
 
-  const count = await orm.em.count(User, { email: 'foo' });
-  expect(count).toBe(0);
+  orm.em.create(Project, { sid: 1, workspace });
+  orm.em.create(Project, { sid: 2, workspace });
+  await orm.em.flush();
+  orm.em.clear();
+
+  const projects = await orm.em.findAll(Project, {
+    fields: ['workspace.sid'],
+    orderBy: { workspace: 'ASC' },
+  });
+
+  console.log(projects.map(it => it.workspace.sid));
 });
